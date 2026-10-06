@@ -1,53 +1,62 @@
-import { ReviewRepository, type CreateReviewInput } from '../repositories/reviewRepository.ts';
+import { ReviewRepository } from '../repositories/reviewRepository.ts';
 import { StallRepository } from '../repositories/stallRepository.ts';
-import { UserRepository } from '../repositories/userRepository.ts';
+import { AppError } from '../errors/AppError.ts';
+import { NotFoundError } from '../errors/NotFoundError.ts';
+import { ForbiddenError } from '../errors/ForbiddenError.ts';
+import type { AuthUser } from './tokenService.ts';
+import type { CreateReviewInput } from '../schemas/reviewSchema.ts';
 
 export class ReviewService {
   private reviewRepository: ReviewRepository;
   private stallRepository: StallRepository;
-  private userRepository: UserRepository;
 
   constructor(
     reviewRepository: ReviewRepository = new ReviewRepository(),
     stallRepository: StallRepository = new StallRepository(),
-    userRepository: UserRepository = new UserRepository(),
   ) {
     this.reviewRepository = reviewRepository;
     this.stallRepository = stallRepository;
-    this.userRepository = userRepository;
   }
 
+  // JOIN dengan USERS (userName) dan STALLS (stallName), tetap dari Tugas 2.
   async getAllReviews(stallId?: number) {
     return this.reviewRepository.findAllWithUser(stallId);
   }
 
   async getReviewById(id: number) {
     const row = await this.reviewRepository.findByIdWithUser(id);
-    if (!row) throw new Error('REVIEW_NOT_FOUND');
+    if (!row) throw new NotFoundError('Review tidak ditemukan');
     return row;
   }
 
-  async createReview(input: CreateReviewInput) {
-    const stall = await this.stallRepository.findById(input.stallId);
-    if (!stall) throw new Error('STALL_NOT_FOUND');
+  // userId datang dari token (diteruskan controller), bukan dari body.
+  async createReview(stallId: number, userId: number, input: CreateReviewInput) {
+    const stall = await this.stallRepository.findById(stallId);
+    if (!stall) throw new NotFoundError('Warung tidak ditemukan');
 
-    const user = await this.userRepository.findById(input.userId);
-    if (!user) throw new Error('USER_NOT_FOUND');
-    if (user.role !== 'customer') throw new Error('NOT_CUSTOMER');
+    const existing = await this.reviewRepository.findByUserAndStall(userId, stallId);
+    if (existing) throw new AppError(409, 'Kamu sudah pernah memberi review untuk warung ini');
 
-    const existing = await this.reviewRepository.findByUserAndStall(input.userId, input.stallId);
-    if (existing) throw new Error('REVIEW_EXISTS');
+    const row = await this.reviewRepository.create({
+      stallId,
+      userId,
+      rating: input.rating,
+      comment: input.comment ?? null,
+    });
+    if (!row) throw new AppError(500, 'Review gagal disimpan');
 
-    const row = await this.reviewRepository.create(input);
-    if (!row) throw new Error('REVIEW_NOT_FOUND');
-
-    await this.reviewRepository.recalcStallStats(input.stallId);
+    await this.reviewRepository.recalcStallStats(stallId); // rating warung ikut diperbarui
     return this.getReviewById(row.id);
   }
 
-  async deleteReview(id: number) {
+  // Hanya penulis review atau admin yang boleh menghapus.
+  async deleteReview(id: number, user: AuthUser) {
     const existing = await this.getReviewById(id); // 404 bila tidak ada
-    await this.reviewRepository.remove(id);        // LIKES & FLAGS ikut terhapus (ON DELETE CASCADE)
+    if (user.role !== 'admin' && existing.userId !== user.id) {
+      throw new ForbiddenError('Kamu hanya bisa menghapus review milikmu sendiri');
+    }
+
+    await this.reviewRepository.remove(id); // LIKES & FLAGS ikut terhapus (cascade)
     await this.reviewRepository.recalcStallStats(existing.stallId);
     return existing;
   }

@@ -1,4 +1,4 @@
-import { randomBytes, scryptSync } from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import { UserRepository, type UserRole } from '../repositories/userRepository.ts';
 
 export interface CreateUserInput {
@@ -6,13 +6,6 @@ export interface CreateUserInput {
   email: string;
   password: string;
   role?: UserRole;
-}
-
-// Hash password dengan scrypt + salt acak (bawaan Node, tanpa library tambahan).
-function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString('hex');
-  const hash = scryptSync(password, salt, 64).toString('hex');
-  return `scrypt$${salt}$${hash}`;
 }
 
 export class UserService {
@@ -32,10 +25,13 @@ export class UserService {
     const existing = await this.userRepository.findByEmail(email);
     if (existing) throw new Error('EMAIL_EXISTS');
 
+    // bcrypt, sama seperti register, supaya user ini juga bisa login.
+    const passwordHash = await bcrypt.hash(input.password, Number(process.env.BCRYPT_SALT_ROUNDS ?? 10));
+
     const row = await this.userRepository.create({
       name: input.name.trim(),
       email,
-      passwordHash: hashPassword(input.password),
+      passwordHash,
       role: input.role ?? 'customer',
     });
     if (!row) throw new Error('USER_CREATE_FAILED');

@@ -1,10 +1,10 @@
-import {
-  StallRepository,
-  type CreateStallInput,
-  type FindAllParams,
-} from '../repositories/stallRepository.ts';
+import { StallRepository, type FindAllParams } from '../repositories/stallRepository.ts';
 import { MenuItemRepository } from '../repositories/menuItemRepository.ts';
 import type { MenuItemDto, StallResponseDto } from '../dtos/stallDto.ts';
+import { NotFoundError } from '../errors/NotFoundError.ts';
+import { ForbiddenError } from '../errors/ForbiddenError.ts';
+import type { AuthUser } from './tokenService.ts';
+import type { CreateStallInput, UpdateStallInput } from '../schemas/stallSchema.ts';
 
 type StallRow = NonNullable<Awaited<ReturnType<StallRepository['findById']>>>;
 
@@ -43,31 +43,41 @@ export class StallService {
 
   async getStallById(id: number): Promise<StallResponseDto> {
     const row = await this.stallRepository.findById(id);
-    if (!row) throw new Error('STALL_NOT_FOUND');
+    if (!row) throw new NotFoundError('Warung tidak ditemukan');
     return this.toDto(row);
   }
 
   async getStallMenus(id: number): Promise<MenuItemDto[]> {
     const row = await this.stallRepository.findById(id);
-    if (!row) throw new Error('STALL_NOT_FOUND');
+    if (!row) throw new NotFoundError('Warung tidak ditemukan');
     return this.menuItemRepository.findByStallId(id);
   }
 
-  async createStall(input: CreateStallInput): Promise<StallResponseDto> {
-    const row = await this.stallRepository.create(input);
-    if (!row) throw new Error('STALL_NOT_FOUND');
+  // ownerId datang dari token (diteruskan controller), bukan dari body.
+  async createStall(input: CreateStallInput, ownerId: number): Promise<StallResponseDto> {
+    const row = await this.stallRepository.create({ ...input, ownerId });
+    if (!row) throw new NotFoundError('Warung gagal dibuat');
     return this.toDto(row);
   }
 
-  async updateStall(id: number, input: Partial<CreateStallInput>): Promise<StallResponseDto> {
+  async updateStall(id: number, input: UpdateStallInput, user: AuthUser): Promise<StallResponseDto> {
+    const current = await this.stallRepository.findById(id);
+    if (!current) throw new NotFoundError('Warung tidak ditemukan');
+
+    // Otorisasi tingkat objek: role "owner" saja belum cukup,
+    // warung yang diubah juga harus miliknya. Admin boleh mengubah semua warung.
+    if (user.role !== 'admin' && current.ownerId !== user.id) {
+      throw new ForbiddenError('Kamu hanya bisa mengubah warung milikmu sendiri');
+    }
+
     const row = await this.stallRepository.update(id, input);
-    if (!row) throw new Error('STALL_NOT_FOUND');
+    if (!row) throw new NotFoundError('Warung tidak ditemukan');
     return this.toDto(row);
   }
 
   async deleteStall(id: number): Promise<StallResponseDto> {
     const row = await this.stallRepository.remove(id);
-    if (!row) throw new Error('STALL_NOT_FOUND');
+    if (!row) throw new NotFoundError('Warung tidak ditemukan');
     return this.toDto(row);
   }
 }
