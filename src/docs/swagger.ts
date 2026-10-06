@@ -1,15 +1,39 @@
 import swaggerAutogen from 'swagger-autogen';
 
 const doc = {
-  info: { title: 'Review Kantin API', version: '1.0.0' },
+  info: { title: 'Review Kantin API', version: '2.0.0' },
   servers: [{ url: 'http://localhost:3000' }],
+  // Tombol "Authorize" di Swagger UI. Isi dengan: Bearer <token dari login>
+  securityDefinitions: {
+    bearerAuth: {
+      type: 'apiKey',
+      in: 'header',
+      name: 'Authorization',
+      description: 'Ketik: Bearer <token dari POST /api/v1/auth/login>',
+    },
+  },
   definitions: {
+    RegisterInput: {
+      $name: 'Nisa Zhaafirah',
+      $email: 'nisa.tugas3@student.test',
+      $password: 'rahasia123',
+    },
+    LoginInput: {
+      $email: 'admin@kantin.test',
+      $password: 'rahasia123',
+    },
     StallInput: {
-      $ownerId: 2,
       $name: 'Warung Baru',
       category: 'Nasi',
       location: 'Kantin FK',
-      description: '',
+      description: 'Nasi goreng dadakan',
+    },
+    StallUpdate: {
+      description: 'Deskripsi baru warung',
+    },
+    ReviewInput: {
+      $rating: 5,
+      comment: 'Enak dan porsinya pas',
     },
     MenuItemInput: {
       $stallId: 5,
@@ -25,12 +49,6 @@ const doc = {
       $email: 'sausan@student.test',
       $password: 'rahasia123',
       role: 'customer',
-    },
-    ReviewInput: {
-      $stallId: 4,
-      $userId: 12,
-      $rating: 5,
-      comment: 'Mie ayamnya enak, porsinya pas',
     },
     LikeInput: {
       $reviewId: 1,

@@ -42,6 +42,14 @@ export class UserRepository {
     return rows[0];
   }
 
+    // Khusus login: ikut mengambil password_hash untuk dicocokkan dengan bcrypt.
+  // Hasilnya tidak boleh dikirim langsung ke client.
+  async findAuthByEmail(email: string) {
+    const db = await getDb();
+    const rows = await db.select().from(users).where(eq(users.email, email));
+    return rows[0];
+  }
+
   async create(input: NewUserRow) {
     const db = await getDb();
     const rows = await db.insert(users).output().values(input);
